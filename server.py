@@ -1,3 +1,4 @@
+# server.py
 import random
 import socket
 import threading
@@ -17,7 +18,7 @@ OFFER_INTERVAL_SEC = 1.0
 TCP_BACKLOG = 50
 TCP_TIMEOUT = 10.0
 
-SERVER_NAME = "Blackijecky"  # your server name
+SERVER_NAME = "Blackijecky"
 
 
 def make_deck() -> List[Card]:
@@ -65,7 +66,6 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int]) -> None:
     print(f"[+] TCP client connected from {addr[0]}:{addr[1]}")
 
     try:
-        # Read request (38 bytes)
         req = recv_exact(conn, 38)
         parsed = unpack_request(req)
         if not parsed:
@@ -88,25 +88,23 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int]) -> None:
                   f"{pretty_card(player[1].rank, player[1].suit)} (total={hand_total(player)})")
             print(f"Dealer shows: {pretty_card(dealer[0].rank, dealer[0].suit)} (hidden=??)")
 
-            # Send initial 3 payloads: player 2 cards + dealer upcard
+            # initial 3 payloads
             conn.sendall(pack_server_payload(RES_NOT_OVER, player[0].rank, player[0].suit))
             conn.sendall(pack_server_payload(RES_NOT_OVER, player[1].rank, player[1].suit))
             conn.sendall(pack_server_payload(RES_NOT_OVER, dealer[0].rank, dealer[0].suit))
 
-            # Player decision loop
             round_finished = False
 
             while not round_finished:
                 pt = hand_total(player)
                 if pt > 21:
-                    # Player busts -> LOSS (send exactly once)
                     print(f"Player busts with {pt}. Dealer wins.")
                     losses += 1
+                    # Send final result once (card field can be any valid card; keep dealer[0] like you had)
                     conn.sendall(pack_server_payload(RES_LOSS, dealer[0].rank, dealer[0].suit))
                     round_finished = True
                     break
 
-                # Read client decision (10 bytes)
                 decision_pkt = recv_exact(conn, 10)
                 decision = unpack_client_payload(decision_pkt)
                 if decision not in ("Hittt", "Stand"):
@@ -120,15 +118,13 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int]) -> None:
                     player.append(c)
                     conn.sendall(pack_server_payload(RES_NOT_OVER, c.rank, c.suit))
                     print(f"Player hits: {pretty_card(c.rank, c.suit)} (total={hand_total(player)})")
-                    continue  # keep asking for decision
+                    continue
 
-                # decision == "Stand" -> Dealer plays ONCE, then end round
-                # Reveal hidden card
+                # Stand: reveal hidden card
                 conn.sendall(pack_server_payload(RES_NOT_OVER, dealer[1].rank, dealer[1].suit))
                 print(f"Dealer reveals: {pretty_card(dealer[1].rank, dealer[1].suit)} "
                       f"(total={hand_total(dealer)})")
 
-                # Dealer hits until >= 17
                 while hand_total(dealer) < 17:
                     c = draw(deck)
                     dealer.append(c)
@@ -138,7 +134,6 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int]) -> None:
                 dt = hand_total(dealer)
                 pt2 = hand_total(player)
 
-                # Decide result (send EXACTLY ONCE)
                 if dt > 21:
                     print(f"Dealer busts with {dt}. Player wins.")
                     wins += 1
@@ -158,7 +153,6 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int]) -> None:
                         conn.sendall(pack_server_payload(RES_TIE, dealer[-1].rank, dealer[-1].suit))
 
                 round_finished = True
-                break  # IMPORTANT: stop reading decisions for this round
 
         total = wins + losses + ties
         win_rate = (wins / total) if total else 0.0
@@ -180,7 +174,7 @@ def handle_client(conn: socket.socket, addr: Tuple[str, int]) -> None:
 def main():
     tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     tcp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    tcp.bind(("", 0))
+    tcp.bind(("", 0))  # OS chooses port
     tcp.listen(TCP_BACKLOG)
     tcp_port = tcp.getsockname()[1]
 

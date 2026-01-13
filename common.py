@@ -18,7 +18,7 @@ OFFER_STRUCT = struct.Struct("!I B H 32s")   # cookie, type, port, server_name  
 REQUEST_STRUCT = struct.Struct("!I B B 32s") # cookie, type, rounds, client_name => 38 bytes
 
 # Payload header: cookie + type
-PAYLOAD_HDR_STRUCT = struct.Struct("!I B")
+PAYLOAD_HDR_STRUCT = struct.Struct("!I B")   # 5 bytes
 
 # Server round result
 RES_NOT_OVER = 0x0
@@ -31,12 +31,13 @@ SUITS = ["H", "D", "C", "S"]
 
 
 def fix_name(name: str) -> bytes:
-    b = name.encode("utf-8", errors="ignore")
-    b = b[:32]
+    """Encode name to exactly 32 bytes, null-padded."""
+    b = name.encode("utf-8", errors="ignore")[:32]
     return b + b"\x00" * (32 - len(b))
 
 
 def parse_name(b: bytes) -> str:
+    """Decode null-terminated UTF-8 name from 32 bytes."""
     return b.split(b"\x00", 1)[0].decode("utf-8", errors="ignore")
 
 
@@ -70,9 +71,9 @@ def unpack_request(data: bytes) -> Optional[Tuple[int, str]]:
 
 def pack_card(rank: int, suit: int) -> bytes:
     """
-    Server card value is 3 bytes:
-      - rank encoded 01-13 in first 2 bytes (uint16)
-      - suit encoded 0-3 in last byte (uint8), where suits are HDCS
+    Card encoding is 3 bytes:
+      - rank: uint16 (01-13)
+      - suit: uint8  (0-3) mapped to SUITS = ["H","D","C","S"]
     """
     if not (1 <= rank <= 13) or not (0 <= suit <= 3):
         raise ValueError("Invalid card")
@@ -113,8 +114,8 @@ def unpack_server_payload(data: bytes) -> Optional[Tuple[int, Tuple[int, int]]]:
 
 def pack_client_payload(decision5: str) -> bytes:
     """
-    Client decision is 5 bytes text: "Hittt" or "Stand"
-    Payload: cookie(4) type(1) decision(5) = 10 bytes
+    Client decision is exactly 5 ASCII bytes: "Hittt" or "Stand"
+    Packet: cookie(4) type(1) decision(5) = 10 bytes
     """
     if decision5 not in ("Hittt", "Stand"):
         raise ValueError("decision must be 'Hittt' or 'Stand'")
